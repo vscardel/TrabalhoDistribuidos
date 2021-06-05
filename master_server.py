@@ -2,6 +2,8 @@ from functools import reduce
 from dateutil import parser
 import threading
 import datetime
+from time import ctime
+import ntplib
 import socket
 import time
 
@@ -33,32 +35,80 @@ sockets_clientes_dict = {
     3:None
 }
 
+ntp_start = 0
+
+
+clientToMaster = {
+    
+}
+
+master_port_number = {
+    '8080': '0',
+    '8081': '1',
+    '8082': '2',
+    '8083': '3'
+}
+
 
 ''' nested thread function used to receive 
     clock time from a connected client '''
 
 
+def send_ntp(socket_list):
+
+    while True:
+
+        print('Ciclo de envio do NTP')
+
+
+        c = ntplib.NTPClient()
+        response = c.request('south-america.pool.ntp.org',version=3)
+        date_time = ctime(response.tx_time)
+      
+
+        for sk in socket_list:
+            port_number = sk.getsockname()[1]
+            client_socket = socket.socket()  
+            client_socket.connect(('127.0.0.1', port_number))
+            send_string = 'NTP*'+ str(date_time)
+            client_socket.send(send_string.encode())
+            client_socket.shutdown(socket.SHUT_RDWR)
+            client_socket.close()
+
+        time.sleep(5)
+
+
+
 #modificar
 def startRecieveingClockTime(connector, address):
   
+    global ntp_start
+
     while True:
         # recieve clock time
         rcv_string = connector.recv(1024).decode()
-        clock_time_string = rcv_string.split('*')[0]
-        sender_process_number = rcv_string.split('*')[1]
+        check_string = rcv_string.split('*')
 
-        clock_time = parser.parse(clock_time_string)
-        clock_time_diff = datetime.datetime.now() - \
-                                                 clock_time
-        
-        client_data[sender_process_number] = {
-                       "clock_time"      : clock_time,
-                       "time_difference" : clock_time_diff,
-                       "connector"       : connector
-                       }
-  
-        print("Dados dos clientes atualizados no endereço: "+ str(address),
-                                              end = "\n\n")
+        if rcv_string:
+
+            if check_string[0] == 'NTP':
+                if ntp_start < 4:
+                    ntp_start += 1
+                    
+            else:
+                clock_time_string = rcv_string.split('*')[0]
+                sender_process_number = rcv_string.split('*')[1]
+                clock_time = parser.parse(clock_time_string)
+                clock_time_diff = datetime.datetime.now() - \
+                                                         clock_time
+            
+            client_data[sender_process_number] = {
+                           "clock_time"      : clock_time,
+                           "time_difference" : clock_time_diff,
+                           "connector"       : connector
+                           }
+            print('Relógio do processo ' + master_port_number[str(connector.getsockname()[1])] + ' recebeu o horario ' + str(clock_time) + ' do processo ' + str(clientToMaster[connector.getpeername()[1]]) )
+
         time.sleep(5)
   
   
@@ -162,6 +212,15 @@ def synchronizeAllClocks():
 # function used to initiate the Clock Server / Master Node
 def initiateClockServer(socket_list):
 
+    ntp_thread = threading.Thread(
+                      target = send_ntp,
+                      args = (socket_list,) )
+
+    ntp_thread.start()
+
+    while ntp_start < 4:
+        pass
+
     for i in range(len(socket_list)):
 
         sockets_clientes_i = []
@@ -174,6 +233,9 @@ def initiateClockServer(socket_list):
                 client_socket = socket.socket()  
                 client_socket.connect(('127.0.0.1', port_number))
                 sockets_clientes_i.append(client_socket)
+                porta_cliente = client_socket.getsockname()[1]
+                clientToMaster[porta_cliente] = i
+
 
         sockets_clientes_dict[i] = sockets_clientes_i
 
