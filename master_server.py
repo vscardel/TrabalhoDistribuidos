@@ -14,10 +14,12 @@ import time
     #toda vez que um processo recebe o valor do npt do processo mágico ele compara o valor do ntp com o relogio
     #e ajusta caso seja necessário
   
-  
-# datastructure used to store client address and clock data
-client_data = {}
+ 
+#parametro K
+K = 1
 
+# datastructure used to store client address and clock data
+relogios = {}
 
 port_address = [
 
@@ -27,6 +29,13 @@ port_address = [
   8083,
 
 ]
+
+client_clocks = {
+    '0': None,
+    '1': None,
+    '2': None,
+    '3': None
+}
 
 sockets_clientes_dict = {
     0:None,
@@ -61,9 +70,12 @@ def send_ntp(socket_list):
         print('Ciclo de envio do NTP')
 
 
-        c = ntplib.NTPClient()
-        response = c.request('south-america.pool.ntp.org',version=3)
-        date_time = ctime(response.tx_time)
+        try:
+            c = ntplib.NTPClient()
+            response = c.request('south-america.pool.ntp.org',version=3)
+            date_time = ctime(response.tx_time)
+        except:
+            print('problema na requisicao do ntp')
       
 
         for sk in socket_list:
@@ -83,6 +95,7 @@ def send_ntp(socket_list):
 def startRecieveingClockTime(connector, address):
   
     global ntp_start
+    global K
 
     while True:
         # recieve clock time
@@ -92,22 +105,55 @@ def startRecieveingClockTime(connector, address):
         if rcv_string:
 
             if check_string[0] == 'NTP':
+                #atualiza os relogios com o valor inicial do ntp
                 if ntp_start < 4:
+                    my_process_number = master_port_number[str(connector.getsockname()[1])]
+                    relogios[my_process_number] = rcv_string.split('*')[1]
                     ntp_start += 1
-                    
+                else:
+                    ntp_time_string = rcv_string.split('*')[1]
+                    ntp_time = parser.parse(ntp_time_string)
+                    my_process_number = master_port_number[str(connector.getsockname()[1])]
+                    my_time = relogios[my_process_number]
+
+                    if abs(my_time.timestamp()-ntp_time.timestamp()) > K:
+                        print('corrigido')
+                        relogios[my_process_number] = ntp_time_string
+
             else:
                 clock_time_string = rcv_string.split('*')[0]
                 sender_process_number = rcv_string.split('*')[1]
                 clock_time = parser.parse(clock_time_string)
-                clock_time_diff = datetime.datetime.now() - \
-                                                         clock_time
-            
-            client_data[sender_process_number] = {
-                           "clock_time"      : clock_time,
-                           "time_difference" : clock_time_diff,
-                           "connector"       : connector
-                           }
-            print('Relógio do processo ' + master_port_number[str(connector.getsockname()[1])] + ' recebeu o horario ' + str(clock_time) + ' do processo ' + str(clientToMaster[connector.getpeername()[1]]) )
+
+                my_process_number = master_port_number[str(connector.getsockname()[1])]
+                client_process_number = clientToMaster[connector.getpeername()[1]]
+
+                if not client_clocks[my_process_number]:
+                    my_clocks = client_clocks[my_process_number] = {}
+                    my_clocks[client_process_number] = clock_time
+                else:
+                    my_clocks = client_clocks[my_process_number]
+                    my_clocks[client_process_number] = clock_time
+                    #executar o berkeley
+                    if len(my_clocks) == 3:
+                        my_clocks = client_clocks[my_process_number]
+                        all_clocks = []
+                        for key in my_clocks:
+                            date = my_clocks[key]
+                            seconds = date.timestamp()
+                            all_clocks.append(seconds)
+
+                        all_clocks.append(datetime.datetime.now().timestamp())
+                        all_clocks.sort()
+
+                        middle_clocks = all_clocks[1:len(all_clocks)-1]
+                        summ = sum(middle_clocks)
+                        media_segundos = summ/2
+                        data_media = datetime.datetime.fromtimestamp(media_segundos)
+                        relogios[my_process_number] = data_media
+
+
+                print('Relógio do processo ' + master_port_number[str(connector.getsockname()[1])] + ' recebeu o horario ' + str(clock_time) + ' do processo ' + str(clientToMaster[connector.getpeername()[1]]) )
 
         time.sleep(5)
   
@@ -149,66 +195,6 @@ def requestConnection(sockets_clientes_dict):
         time.sleep(5)
   
   
-# subroutine function used to fetch average clock difference
-def getAverageClockDiff():
-  
-    current_client_data = client_data.copy()
-  
-    time_difference_list = list(client['time_difference'] 
-                                for client_addr, client 
-                                    in client_data.items())
-                                     
-  
-    sum_of_clock_difference = sum(time_difference_list, \
-                                   datetime.timedelta(0, 0))
-  
-    average_clock_difference = sum_of_clock_difference \
-                                         / len(client_data)
-  
-    return  average_clock_difference
-  
-  
-''' master sync thread function used to generate 
-    cycles of clock synchronization in the network '''
-
-#ela age a parte das outras checando os dados de client data
-#precisamos descobrir como reenviar os tempos para todos os outros processos
-def synchronizeAllClocks():
-  
-    while True:
-  
-        print("New synchroniztion cycle started.")
-        print("Number of clients to be synchronized: " + \
-                                     str(len(client_data)))
-  
-        if len(client_data) > 0:
-  
-            average_clock_difference = getAverageClockDiff()
-
-            # print("#### average_clock_difference #### " + str(average_clock_difference ))
-  
-            for client_addr, client in client_data.items():
-                try:
-                    synchronized_time = \
-                         datetime.datetime.now() + \
-                                    average_clock_difference
-  
-                    client['connector'].send(str(
-                               synchronized_time).encode())
-  
-                except Exception as e:
-                    print("Something went wrong while " + \
-                          "sending synchronized time " + \
-                          "through " + str(client_addr))
-  
-        else :
-            print("No client data." + \
-                        " Synchronization not applicable.")
-  
-        print("\n\n")
-  
-        time.sleep(5)
-
 # function used to initiate the Clock Server / Master Node
 def initiateClockServer(socket_list):
 
@@ -220,6 +206,8 @@ def initiateClockServer(socket_list):
 
     while ntp_start < 4:
         pass
+
+    print(relogios)
 
     for i in range(len(socket_list)):
 
@@ -247,16 +235,6 @@ def initiateClockServer(socket_list):
 
     request_thread.start()
 
-
-    #agora precisamos entender isso aqui
-
-    #começa a sincronizacao
-
-    print("Starting synchronization parallely...\n")
-    sync_thread = threading.Thread(
-                        target = synchronizeAllClocks,
-                        args = ())
-    sync_thread.start()
   
   
   
