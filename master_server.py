@@ -130,13 +130,14 @@ def initiateClockServer(socket_list):
                 
                 port_number = socket_list[j].getsockname()[1]
 
-                client_socket = socket.socket()  
-                client_socket.connect(('127.0.0.1', port_number))
-
-                sockets_clientes_i.append(client_socket)
+                client_socket = socket.socket()
 
                 porta_cliente = client_socket.getsockname()[1]
                 clientToMaster[porta_cliente] = i
+                
+                client_socket.connect(('127.0.0.1', port_number))
+
+                sockets_clientes_i.append(client_socket)
 
         sockets_clientes_dict[i] = sockets_clientes_i
 
