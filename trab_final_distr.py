@@ -201,6 +201,7 @@ def startRecieveingClockTime(connector, address):
 
                     if abs(my_time.timestamp()-ntp_time.timestamp()) > K:
                         relogios[my_process_number] = ntp_time_string
+                        print("[PROCESSO " + my_process_number + "] Relógio local variou em " + str(abs(my_time.timestamp()-ntp_time.timestamp())) + " segundos com relação ao relógio NTP")
                         print("[PROCESSO " + my_process_number + "] Relógio corrigido com valor NTP")
 
             # Se o relógio que chegou foi enviado por um dos clientes
@@ -227,6 +228,9 @@ def startRecieveingClockTime(connector, address):
                     # Se já há informações de todos os processos.
                     # BERKELEY
                     if len(my_clocks) == 3:
+                        my_clock_current_time = datetime.datetime.now()
+                    	
+                    	print("[PROCESSO " + my_process_number + "] Sincronização interna iniciando... Valor do relógio antes da sincronização: " + str(my_clock_current_time))
                         my_clocks = client_clocks[my_process_number]
                         all_clocks = []
 
@@ -237,7 +241,7 @@ def startRecieveingClockTime(connector, address):
                             all_clocks.append(seconds)
 
                         # Adicionar próprio relógio
-                        all_clocks.append(datetime.datetime.now().timestamp())
+                        all_clocks.append(my_clock_current_time.timestamp())
                         all_clocks.sort()
 
                         # Berkeley
