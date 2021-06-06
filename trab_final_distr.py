@@ -21,6 +21,7 @@ port_address = [
   8083,
 ]
 
+# Dicionários com as informações de sincronização que cada processo recolhe
 client_clocks = {
     '0': None,
     '1': None,
@@ -42,6 +43,11 @@ ntp_start = 0
 
 # Mapear socket cliente para o processo que o criou
 clientToMaster = {
+    
+}
+
+# Mapear socket cliente para o processo para o qual ele foi criado
+clientToReceiver = {
     
 }
 
@@ -97,7 +103,7 @@ def requestConnection(sockets_clientes_dict):
                 send_string = str(datetime.datetime.now()) + '*' + str(processo)
                 socket_cliente.send(send_string.encode())
                 
-                master_process_number = clientToMaster[socket_cliente.getsockname()[1]]
+                master_process_number = clientToReceiver[socket_cliente.getsockname()[1]]
 
                 print("[PROCESSO " + str(processo) + "] Enviou horário com sucesso para o processo " + str(master_process_number))
   
@@ -136,6 +142,7 @@ def initiateClockServer(socket_list):
 
                 porta_cliente = client_socket.getsockname()[1]
                 clientToMaster[porta_cliente] = i
+                clientToReceiver[porta_cliente] = master_port_number[str(port_number)]
 
                 sockets_clientes_i.append(client_socket)
 
