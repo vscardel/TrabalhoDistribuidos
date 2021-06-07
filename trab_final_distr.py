@@ -229,8 +229,8 @@ def startRecieveingClockTime(connector, address):
                     # BERKELEY
                     if len(my_clocks) == 3:
                         my_clock_current_time = datetime.datetime.now()
-                    	
-                    	print("[PROCESSO " + my_process_number + "] Sincronização interna iniciando... Valor do relógio antes da sincronização: " + str(my_clock_current_time))
+                        
+                        print("[PROCESSO " + my_process_number + "] Sincronização interna iniciando... Valor do relógio antes da sincronização: " + str(my_clock_current_time))
                         my_clocks = client_clocks[my_process_number]
                         all_clocks = []
 
